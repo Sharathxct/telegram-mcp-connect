@@ -1,0 +1,63 @@
+{
+  "name": "telegram-mcp-connect",
+  "version": "0.1.0",
+  "description": "Telegram MCP server that runs locally. Connect Telegram to Claude Code, Codex, Cursor and other MCP clients to read chats, search messages and summarise conversations. Your session stays on your machine.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "bun@1.2.22",
+  "homepage": "https://github.com/sharathxct/telegram-mcp-connect#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sharathxct/telegram-mcp-connect.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sharathxct/telegram-mcp-connect/issues"
+  },
+  "bin": {
+    "telegram-mcp-connect": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "telegram",
+    "telegram-mcp",
+    "mcp",
+    "mcp-server",
+    "modelcontextprotocol",
+    "model-context-protocol",
+    "claude",
+    "claude-code",
+    "codex",
+    "cursor",
+    "windsurf",
+    "telegram-client",
+    "mtproto",
+    "ai-agent",
+    "chat"
+  ],
+  "scripts": {
+    "build": "bun build ./bin/cli.ts --target=node --outdir=dist --packages=external --format=esm --banner='#!/usr/bin/env node' && chmod +x dist/cli.js",
+    "dev": "bun bin/cli.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "teleproto": "^1.228.4"
+  },
+  "overrides": {
+    "@hono/node-server": "2.0.12",
+    "fast-uri": "3.1.4"
+  }
+}

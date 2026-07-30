@@ -1,6 +1,6 @@
 {
   "name": "telegram-mcp-connect",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Telegram MCP server that runs locally. Connect Telegram to Claude Code, Codex, Cursor and other MCP clients to read chats, search messages and summarise conversations. Your session stays on your machine.",
   "license": "MIT",
   "type": "module",

@@ -5,6 +5,13 @@ interface MutableInterface extends Interface {
   output?: NodeJS.WriteStream;
 }
 
+const MASK_CHAR = "•";
+const CLEAR_LINE = "\x1b[2K\x1b[G";
+
+export function maskedLine(question: string, typedLength: number): string {
+  return `${CLEAR_LINE}${question}${MASK_CHAR.repeat(Math.max(0, typedLength))}`;
+}
+
 let rl: MutableInterface | null = null;
 let queued: string[] = [];
 let waiting: ((line: string) => void) | null = null;
@@ -60,7 +67,11 @@ export async function ask(question: string, opts: { mask?: boolean; default?: st
 
   if (mask) {
     iface._writeToOutput = (text: string) => {
-      if (text.includes("\n")) iface.output?.write("\n");
+      if (text.includes("\n")) {
+        iface.output?.write("\n");
+        return;
+      }
+      iface.output?.write(maskedLine(question, iface.line?.length ?? 0));
     };
   }
 

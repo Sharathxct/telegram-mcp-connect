@@ -80,84 +80,47 @@ async function cmdServe(allowWriteFlag: boolean): Promise<void> {
 }
 
 async function cmdSetup(): Promise<void> {
-  console.log(`
-${style.bold("Connect Telegram to your AI tools")}
-
-This runs entirely on your machine. Your Telegram session is saved to
-${style.cyan(configPath())} and is never uploaded anywhere.
-
-${style.yellow("Be aware:")} a Telegram session grants full access to your account, not
-read-only access. Only do this on a computer you control.
-`);
-
-  if (!(await confirm("Continue?", true))) return;
+  console.log(`\n${style.bold("telegram-mcp-connect")} ${style.dim(VERSION)}\n`);
 
   const config = readConfig();
   const creds = await collectCredentials(config);
   const session = await runPhoneLogin(creds, config);
   if (!session) return;
 
-  const allowWrite = await confirm(
-    `\nAllow ${style.bold("sending")} messages too? Read-only is the safe default`,
-    false,
-  );
+  const allowWrite = await confirm("Allow sending messages?", false);
 
-  const finalConfig: TgConfig = { ...creds, session: session.session, allowWrite };
-  writeConfig(finalConfig);
+  writeConfig({ ...creds, session: session.session, allowWrite });
 
-  console.log(`\n${style.green("✓")} Signed in as ${style.bold(session.name)}`);
-  console.log(`${style.green("✓")} Saved to ${configPath()} ${style.dim("(mode 0600)")}`);
-  console.log(`${style.green("✓")} Mode: ${allowWrite ? "read + send" : "read-only"}`);
+  console.log(`\n${style.green("✓")} ${session.name}`);
+  console.log(`${style.green("✓")} ${configPath()}\n`);
 
   await registerWithAgents(allowWrite);
-
-  console.log(`
-${style.bold("Done.")} Restart your AI tool, then try:
-
-  ${style.cyan('"list my telegram chats"')}
-  ${style.cyan('"summarise the last 20 messages in <chat name>"')}
-
-If a tool cannot see it, run ${style.cyan("npx telegram-mcp-connect doctor")}.
-`);
 }
 
 async function collectCredentials(config: Partial<TgConfig>): Promise<{ apiId: number; apiHash: string }> {
   if (config.apiId && config.apiHash) {
-    console.log(`\n${style.green("✓")} Using saved API credentials (app id ${config.apiId}).`);
-    if (!(await confirm("Replace them?", false))) {
-      return { apiId: config.apiId, apiHash: config.apiHash };
+    if (!(await confirm(`Use saved app ${config.apiId}?`, true))) {
+      return promptCredentials();
     }
+    return { apiId: config.apiId, apiHash: config.apiHash };
   }
+  return promptCredentials();
+}
 
-  console.log(`
-${style.bold("Step 1 of 2 — create a Telegram app")}
-
-Telegram needs every program that talks to it to have an app id. This identifies
-${style.bold("the app")}, not you, and takes a minute:
-
-  1. Opening ${style.cyan(APPS_URL)}
-  2. Log in with your phone number ${style.dim("(the code arrives in your Telegram app)")}
-  3. Fill the form — any title works, e.g. "my mcp"
-  4. Copy ${style.bold("App api_id")} and ${style.bold("App api_hash")} back here
-`);
-
+async function promptCredentials(): Promise<{ apiId: number; apiHash: string }> {
+  console.log(`Create an app at ${style.cyan(APPS_URL)}\n`);
   openBrowser(APPS_URL);
 
   let apiId = 0;
   while (!apiId) {
-    const raw = await ask("App api_id (numbers only): ");
-    apiId = Number(raw);
-    if (!Number.isInteger(apiId) || apiId <= 0) {
-      apiId = 0;
-      console.log(style.red("  That does not look like an api_id. It is a number, around 7 or 8 digits long."));
-    }
+    const raw = Number(await ask("  api_id:   ", { mask: true }));
+    if (Number.isInteger(raw) && raw > 0) apiId = raw;
   }
 
   let apiHash = "";
   while (!apiHash) {
-    const raw = (await ask("App api_hash (32 characters): ")).trim();
+    const raw = (await ask("  api_hash: ", { mask: true })).trim();
     if (/^[a-f0-9]{32}$/i.test(raw)) apiHash = raw;
-    else console.log(style.red("  That should be 32 characters, letters a to f and digits only."));
   }
 
   return { apiId, apiHash };
@@ -169,20 +132,14 @@ async function runPhoneLogin(
 ): Promise<{ session: string; name: string } | null> {
   if (existing.session) {
     const who = await describeExistingSession({ ...creds, session: existing.session, allowWrite: false });
-    if (who) {
-      console.log(`\n${style.green("✓")} Already signed in as ${style.bold(who)}.`);
-      if (!(await confirm("Sign in again as a different account?", false))) {
-        return { session: existing.session, name: who };
-      }
+    if (who && !(await confirm(`Stay signed in as ${who}?`, true))) {
+      // fall through to a fresh login
+    } else if (who) {
+      return { session: existing.session, name: who };
     }
   }
 
-  console.log(`
-${style.bold("Step 2 of 2 — sign in")}
-
-${style.yellow("Note:")} the login code is sent ${style.bold("inside the Telegram app")}, not by SMS.
-Look for a message from "Telegram" on your phone or desktop app.
-`);
+  console.log("");
 
   const client = new TelegramClient(new StringSession(""), creds.apiId, creds.apiHash, {
     connectionRetries: 3,
@@ -194,9 +151,9 @@ Look for a message from "Telegram" on your phone or desktop app.
   });
   try {
     await client.start({
-      phoneNumber: async () => ask("Phone number with country code (e.g. +91…): "),
-      phoneCode: async () => ask("Login code from your Telegram app: "),
-      password: async () => ask("Two-step verification password: ", { mask: true }),
+      phoneNumber: async () => ask("  phone:    "),
+      phoneCode: async () => ask("  code:     "),
+      password: async () => ask("  password: ", { mask: true }),
       firstAndLastNames: accountGuard.firstAndLastNames,
       onError: accountGuard.onError,
     });
@@ -237,24 +194,13 @@ async function describeExistingSession(config: TgConfig): Promise<string | null>
 }
 
 async function registerWithAgents(allowWrite: boolean): Promise<void> {
-  console.log(`
-${style.bold("Register with your AI tools")}
-
-add-mcp writes the right config for Claude Code, Codex, Cursor, VS Code, Zed and
-more. Your credentials are ${style.bold("not")} passed to it — they stay in the file above.
-`);
-
-  if (!(await confirm("Run it now?", true))) {
+  if (!(await confirm("Add to your AI tools?", true))) {
     printManualInstructions(allowWrite);
     return;
   }
 
   const args = [`${PKG}@${VERSION}`, "--global", ...(allowWrite ? ["--args", "--allow-write"] : [])];
-  const ok = runAddMcp(args);
-  if (!ok) {
-    console.log(style.yellow("\nCould not run add-mcp. Register manually:"));
-    printManualInstructions(allowWrite);
-  }
+  if (!runAddMcp(args)) printManualInstructions(allowWrite);
 }
 
 function runAddMcp(args: string[]): boolean {
@@ -267,7 +213,7 @@ function printManualInstructions(allowWrite: boolean): void {
   console.log(`
   Claude Code:  claude mcp add -s user telegram -- npx -y ${PKG}@${VERSION}${suffix}
   Codex:        codex mcp add telegram -- npx -y ${PKG}@${VERSION}${suffix}
-  Anything else: run  npx -y ${PKG}@${VERSION}${suffix}  as a stdio MCP server.
+  Other:        npx -y ${PKG}@${VERSION}${suffix}
 `);
 }
 
@@ -339,16 +285,12 @@ const mask = (s: string) => (s.length <= 8 ? "…" : `${s.slice(0, 4)}…${s.sli
 async function cmdLogout(): Promise<void> {
   const config = readConfig();
   if (!isCompleteConfig(config)) {
-    console.log("Not signed in — nothing to do.");
+    console.log("Not signed in.");
     deleteConfig();
     return;
   }
 
-  console.log(`
-This revokes the session on Telegram's side and deletes it locally.
-Your AI tools will lose Telegram access until you run setup again.
-`);
-  if (!(await confirm("Log out?", false))) return;
+  if (!(await confirm("\nLog out and revoke this session?", false))) return;
 
   const client = buildClient(config);
   let revoked = false;

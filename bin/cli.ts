@@ -6,7 +6,6 @@ import {
   configHome,
   configPath,
   deleteConfig,
-  findLegacyEnv,
   isCompleteConfig,
   permissionsAreTight,
   readConfig,
@@ -93,10 +92,7 @@ read-only access. Only do this on a computer you control.
 
   if (!(await confirm("Continue?", true))) return;
 
-  let config = readConfig();
-  const migrated = await maybeMigrateLegacy(config);
-  if (migrated) config = migrated;
-
+  const config = readConfig();
   const creds = await collectCredentials(config);
   const session = await runPhoneLogin(creds, config);
   if (!session) return;
@@ -123,30 +119,6 @@ ${style.bold("Done.")} Restart your AI tool, then try:
 
 If a tool cannot see it, run ${style.cyan("npx telegram-mcp-connect doctor")}.
 `);
-}
-
-async function maybeMigrateLegacy(config: Partial<TgConfig>): Promise<Partial<TgConfig> | null> {
-  if (isCompleteConfig(config)) return null;
-  const legacy = findLegacyEnv([process.cwd()]);
-  if (!legacy) return null;
-
-  console.log(`\nFound an existing session in ${style.cyan(legacy.path)}.`);
-  if (!(await confirm("Import it (and stop keeping credentials in the repo)?", true))) return null;
-
-  const apiId = Number(legacy.values.TG_API_ID);
-  const imported: TgConfig = {
-    apiId,
-    apiHash: legacy.values.TG_API_HASH ?? "",
-    session: legacy.values.TG_SESSION ?? "",
-    allowWrite: false,
-  };
-  if (!isCompleteConfig(imported)) {
-    console.log(style.yellow("  That .env was incomplete — continuing with a fresh login."));
-    return null;
-  }
-  writeConfig(imported);
-  console.log(`${style.green("✓")} Imported. You can now delete ${legacy.path}.`);
-  return imported;
 }
 
 async function collectCredentials(config: Partial<TgConfig>): Promise<{ apiId: number; apiHash: string }> {
@@ -329,13 +301,6 @@ async function cmdDoctor(): Promise<void> {
   }
 
   pass("Tool mode", config.allowWrite ? "read + send (--allow-write)" : "read-only");
-
-  const legacy = findLegacyEnv([process.cwd()]);
-  if (legacy) {
-    console.log(
-      `${style.yellow("!")} Legacy credentials still in ${legacy.path} — delete it once setup has imported them.`,
-    );
-  }
 
   if (isCompleteConfig(config)) {
     process.stdout.write("  Connecting to Telegram… ");

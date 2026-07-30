@@ -18,26 +18,6 @@ export function configPath(): string {
   return join(configHome(), "config.json");
 }
 
-export function parseEnvFile(text: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.replace(/\r$/, "").trim();
-    if (!line || line.startsWith("#")) continue;
-    const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-    if (!m) continue;
-    const key = m[1];
-    let value = (m[2] ?? "").trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
-      (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (key) out[key] = value;
-  }
-  return out;
-}
-
 function readJson(path: string): Record<string, unknown> | null {
   try {
     return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
@@ -98,18 +78,6 @@ export function tightenPermissions(): void {
   try {
     chmodSync(configPath(), 0o600);
   } catch {}
-}
-
-export function findLegacyEnv(dirs: string[]): { path: string; values: Record<string, string> } | null {
-  for (const dir of dirs) {
-    const path = join(dir, ".env");
-    if (!existsSync(path)) continue;
-    try {
-      const values = parseEnvFile(readFileSync(path, "utf8"));
-      if (values.TG_SESSION) return { path, values };
-    } catch {}
-  }
-  return null;
 }
 
 export function isCompleteConfig(c: Partial<TgConfig>): c is TgConfig {

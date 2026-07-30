@@ -16,7 +16,7 @@ import {
 import { existingAccountGuard } from "../src/auth.js";
 import { buildClient, withTimeout } from "../src/client.js";
 import { createStderrLogger } from "../src/logger.js";
-import { ask, closePrompts, confirm, style } from "../src/prompt.js";
+import { ask, closePrompts, confirm, PromptAborted, style } from "../src/prompt.js";
 import { senderName, type Sender } from "../src/format.js";
 import { serve } from "../src/server.js";
 import { VERSION } from "../src/version.js";
@@ -332,6 +332,7 @@ main()
   .then(closePrompts)
   .catch((err) => {
     closePrompts();
+    if (err instanceof PromptAborted) process.exit(130);
     console.error(style.red(`\n${err instanceof Error ? err.message : String(err)}`));
     process.exit(1);
   });

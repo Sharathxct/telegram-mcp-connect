@@ -12,9 +12,21 @@ export function maskedLine(question: string, typedLength: number): string {
   return `${CLEAR_LINE}${question}${MASK_CHAR.repeat(Math.max(0, typedLength))}`;
 }
 
+export class PromptAborted extends Error {
+  constructor() {
+    super("Input closed.");
+    this.name = "PromptAborted";
+  }
+}
+
+interface Pending {
+  resolve: (line: string) => void;
+  reject: (err: Error) => void;
+}
+
 let rl: MutableInterface | null = null;
 let queued: string[] = [];
-let waiting: ((line: string) => void) | null = null;
+let pending: Pending | null = null;
 let closed = false;
 
 function getInterface(): MutableInterface {
@@ -26,17 +38,26 @@ function getInterface(): MutableInterface {
   }) as MutableInterface;
 
   rl.on("line", (line: string) => {
-    const resolve = waiting;
-    waiting = null;
-    if (resolve) resolve(line);
+    const waiter = pending;
+    pending = null;
+    if (waiter) waiter.resolve(line);
     else queued.push(line);
   });
 
-  rl.on("close", () => {
+  // Ctrl+C and EOF must abort, never hand back an empty string. Returning ""
+  // made retry loops spin forever against an already-closed stream.
+  const abort = () => {
     closed = true;
-    const resolve = waiting;
-    waiting = null;
-    resolve?.("");
+    const waiter = pending;
+    pending = null;
+    waiter?.reject(new PromptAborted());
+  };
+
+  rl.on("close", abort);
+  rl.on("SIGINT", () => {
+    rl?.output?.write("\n");
+    abort();
+    rl?.close();
   });
 
   return rl;
@@ -45,17 +66,19 @@ function getInterface(): MutableInterface {
 function readLine(): Promise<string> {
   const next = queued.shift();
   if (next !== undefined) return Promise.resolve(next);
-  if (closed) return Promise.resolve("");
-  return new Promise<string>((resolve) => {
-    waiting = resolve;
+  if (closed) return Promise.reject(new PromptAborted());
+  return new Promise<string>((resolve, reject) => {
+    pending = { resolve, reject };
   });
 }
 
 export function closePrompts(): void {
+  closed = true;
+  pending = null;
+  rl?.removeAllListeners("close");
   rl?.close();
   rl = null;
   queued = [];
-  waiting = null;
   closed = false;
 }
 
